@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sun Clock</title>
+    <script src="js/react.js"></script>
+    <script src="js/react-dom.js"></script>
+    <script src="js/browser.min.js"></script>
+    <script src="js/suncalc.js"></script>
+    <style>
+      .solar-track circle, .solar-track line {
+        stroke: #DFA308;
+        fill: none;
+      }
+    
+/*      circle.solar-image {
+        fill: #DFCE08;
+      }
+*/      
+      line {
+        stroke: #ccc;
+      }
+      rect {
+        fill: #ccc;
+      }
+      
+      .base path, .base rect {
+        fill: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="clock"></div>
+    <script type="text/babel">
+      let loopRadius = 120; // 1 foot -- units in tenths of an inch
+      let featureBase = 1.25; // 1/8 inch, smallest feature size
+      let baseOffset = 24; // 2 inches
+      let baseHeight = featureBase*16;
+      let containingMultiplier = 1.4;
+    
+      let DateShiftMixin = {
+        getInitialState() {
+          return {
+            latlon: [37.83, -122.25]
+          }
+        },
+        
+        componentDidMount() {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            console.log("setting position to", pos.coords);
+            this.setState({
+              latlon: [pos.coords.latitude, pos.coords.longitude]
+            });
+          });
+        },
+        
+        Θ(date) {
+          let tilt = 23.44;
+          let [latitude, longitude] = this.state.latlon;
+          let sunTimes = SunCalc.getTimes(date, latitude, longitude);
+          
+          let solarCycleFraction = (date-sunTimes.solarNoon)/(24*60*60*1000);
+          let Θ = solarCycleFraction * 2*Math.PI - Math.PI/2;
+          return Θ;
+        },
+        verticalOffset(date) {
+          let tilt = 23.44;
+          let [latitude, longitude] = this.state.latlon;
+          let sunTimes = SunCalc.getTimes(date, latitude, longitude);
+          let sunPosition = SunCalc.getPosition(date, latitude, longitude);
+          let sunHighestPosition = SunCalc.getPosition(sunTimes.solarNoon, latitude, longitude);
+          
+          let dayLength = sunTimes.sunset - sunTimes.sunrise;
+          
+          return -Math.sin(dayLength/2/(24*60*60*1000) * Math.PI * 2+Math.PI/2);
+        }
+      };
+      
+      let SolarImage = React.createClass({
+        mixins: [DateShiftMixin],
+        
+        render() {
+          let date = this.props.date;
+          let Θ = this.Θ(date)-Math.PI/2;
+          let height = this.verticalOffset(date) - Math.cos(Θ);
+
+          let color = height > 0.2 ? 'hsl(60, 100%, 90%)' : 
+            height > -0.2 ? `hsl(${60-(0.2-height)*120}, 100%, ${90-(0.2-height)*120}%)` :
+            height > -0.4 ? `hsl(${60-(0.2-height)*120}, ${(height+0.4)*500}%, ${90-(0.2-height)*120}%)` : 'black';
+          
+          return <circle 
+            className="solar-image" 
+            fill={color}
+            transform={`rotate(${Θ*180/Math.PI}) translate(0 ${loopRadius})`}
+            r={loopRadius/4} />;
+        }
+      });
+      
+      let SolarTrack = React.createClass({
+        mixins: [DateShiftMixin],
+
+        render() {
+          let date = this.props.date;
+          let Θ = this.Θ(date)-Math.PI/2;
+
+          let lines = Array.from(new Array(3)).map((_, index, array) => 
+            <line 
+              key={"l-"+index} 
+              y1={loopRadius} 
+              transform={`rotate(${(index+0.5) / array.length * 360})`} 
+              strokeWidth={featureBase*2} />
+          )
+          return <g className="solar-track" transform={`rotate(${Θ*180/Math.PI})`}>
+              <circle r={loopRadius} strokeWidth={featureBase*4}/>
+              <circle r={featureBase*2} strokeWidth={featureBase*4}/>
+              {lines}
+            </g>
+        }
+      });
+      
+      let ClockBase = React.createClass({
+        render() {
+          let axleWidth = featureBase*6;
+          let baseWidth = featureBase*10;
+          return <g className="base">
+              <rect x={-this.props.baseWidth} width={2*this.props.baseWidth} y={this.props.baseWidth+baseOffset-baseHeight} height={baseHeight} />
+              <path d={`M${-axleWidth} 0A${axleWidth} ${axleWidth} 0 0 1 ${axleWidth} 0L${baseWidth} ${this.props.baseWidth+baseOffset-baseHeight-axleWidth}a${axleWidth} ${axleWidth} 0 0 0 ${axleWidth} ${axleWidth}l0 5 ${-2*(baseWidth+axleWidth)} 0 0 -5a${axleWidth} ${axleWidth} 0 0 0 ${axleWidth} ${-axleWidth} z`} />
+            </g>
+        }
+      });
+      
+      let SolarClock = React.createClass({
+        render() {
+          let baseWidth = loopRadius*containingMultiplier;
+          return <g>
+            <ClockBase baseWidth={baseWidth} />
+            <SolarTrack date={this.props.date} />
+            <SolarImage date={this.props.date} />
+            <HorizonLine date={this.props.date} baseWidth={baseWidth}/>
+            <circle x="0" y="0" r="1" />
+          </g>;
+        }
+      });
+      
+      let HorizonLine = React.createClass({
+        mixins: [DateShiftMixin],
+        
+        render() {
+          let l = this.props.baseWidth;
+          return <g>
+              <line x1={-l+10} x2={-l+10} y1={l+baseOffset-baseHeight} y2={-loopRadius} strokeWidth={featureBase}/>
+              <line x1={l-10} x2={l-10} y1={l+baseOffset-baseHeight} y2={-loopRadius} strokeWidth={featureBase}/>
+              <line 
+                x1={-l} 
+                x2={l} 
+                strokeWidth={featureBase*8}
+                transform={`translate(0 ${this.verticalOffset(this.props.date)*loopRadius})`} />
+            </g>
+        }
+      });
+      
+      let SolarClockControl = React.createClass({
+        getInitialState() {
+          return {
+            date: new Date(),
+            rate: 0
+          };
+        },
+        
+        dateFromSliders() {
+          let yearStart = +new Date(this.state.date.getFullYear(), 0); // - 7*60*60*1000;
+          console.log("year starts on", yearStart);
+          let newDate = new Date(+yearStart + (Math.floor(this.refs.daySlider.value)+0.5)*24*60*60*1000);
+          let time = Number(this.refs.timeSlider.value);
+          console.log("using time", time);
+          newDate.setHours(Math.floor(time / (60*60)));
+          newDate.setMinutes(Math.floor((time % (60*60)) / 60));
+          newDate.setSeconds(Math.floor(time % 60));
+          console.log("date from sliders is", newDate);
+          return newDate;
+        },
+        
+        handleTimeChange(e) {
+          this.setState({
+            date: this.dateFromSliders()
+          });
+        },
+        
+        handleRateChange(e) {
+          this.setState({
+            rate: this.refs.rateSlider.value
+          });
+        },
+        
+        tickTime(dt) {
+          this.setState({
+            date: new Date(+this.state.date+dt)
+          });
+        },
+        
+        componentDidMount() {
+          this.animate();
+        },
+        
+        animate() {
+          let lastStep;
+          let step = (ts) => {
+            let speedMulitple = Math.pow(10, this.state.rate);
+            
+            if (lastStep) {
+              this.tickTime((ts-lastStep)*speedMulitple);
+            }
+            
+            lastStep = ts;
+            requestAnimationFrame(step);
+          }
+          requestAnimationFrame(step);
+        },
+        
+        resetTime() {
+          this.setState(this.getInitialState())
+        },
+        
+        render() {
+          let date = new Date(this.state.date);
+          let secondsSinceMidnight = date.getHours()*60*60 + date.getMinutes()*60 + date.getSeconds() + date.getMilliseconds()/1000;
+          let dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0)) / (24*60*60*1000));
+          let secondsPerSecond = Math.round(Math.pow(10, this.state.rate));
+          let side = loopRadius*(containingMultiplier+0.1);
+          
+          return <div>
+            <svg viewBox={[-side, -side, side*2, side*2+baseOffset].join(" ")} style={{width: side*3, height: (side+baseOffset/2)*3}}>
+              <SolarClock date={this.state.date} />
+            </svg><br />
+            Day of year: <input ref="daySlider" type="range" min="0" max="365" value={dayOfYear} onChange={this.handleTimeChange}/><br />
+            Time of day: <input ref="timeSlider" type="range" min="0" max={24*60*60-1} value={secondsSinceMidnight} onChange={this.handleTimeChange}/><br />
+            Speed: <input ref="rateSlider" type="range" min="0" max={Math.log10(10000000)} step="0.1" value={this.state.rate} onChange={this.handleRateChange}/> {secondsPerSecond} seconds pass in simulation for each real second<br />
+            <button onClick={this.resetTime}>Reset!</button>
+          </div>
+        }
+      });
+      
+      ReactDOM.render(
+        <SolarClockControl />,
+        document.getElementById('clock')
+      );
+    </script>
+  </body>
+</html>
