@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sun Clock</title>
+    <script src="js/react.js"></script>
+    <script src="js/react-dom.js"></script>
+    <script src="js/browser.min.js"></script>
+    <style>
+    </style>
+  </head>
+  <body>
+    <div id="canvas"></div>
+    <script type="text/babel">
+    
+    let RadialMagnetLines = React.createClass({
+      getInitialState() {
+        return {
+          numTeeth: 75,
+          magnetDiameter: 0.25, // inches
+          magnetSpacing: 0.25 // inches
+        }
+      },
+      
+      radiusForNumTeeth(teeth) {
+        return teeth * (this.state.magnetDiameter+this.state.magnetSpacing) / (2 * Math.PI);
+      },
+      
+      newTeeth(event) {
+        this.setState({
+          numTeeth: Math.round(event.target.value)
+        })
+      },
+      
+      render() {        
+        let radius = this.radiusForNumTeeth(this.state.numTeeth);
+        let outerRadius = radius + this.state.magnetDiameter;
+
+        let grayLines = [];
+        for (let i = 0; i < this.state.numTeeth; i++) {
+          grayLines.push(<line key={`${i}-gray`}
+            strokeWidth={this.state.magnetDiameter}
+            stroke="#ccc"
+            x2={radius * Math.cos(i/this.state.numTeeth*Math.PI*2)} 
+            y2={radius * Math.sin(i/this.state.numTeeth*Math.PI*2)} />);
+        }
+        let blackLines = [];
+        for (let i = 0; i < this.state.numTeeth; i++) {
+          blackLines.push(<line key={`${i}-black`}
+            strokeWidth={this.state.magnetDiameter/20}
+            stroke="black"
+            x2={radius * Math.cos(i/this.state.numTeeth*Math.PI*2)} 
+            y2={radius * Math.sin(i/this.state.numTeeth*Math.PI*2)} />);
+        }
+        return <div className="magnetLines">
+            <p>Magnet gear with <input type="number" value={this.state.numTeeth} style={{width: 40}} onChange={this.newTeeth} /> teeth and a {Math.round(radius*100)/100}-inch magnet center radius.</p>
+            <svg viewBox={`${-outerRadius} ${-outerRadius} ${2*outerRadius} ${2*outerRadius}`} width={Math.min(600, outerRadius*72)} height={Math.min(600, outerRadius*72)}>
+              {grayLines}
+              {blackLines}
+              <circle r={this.state.magnetDiameter/10} fill="white" />
+              <circle r={outerRadius} stroke="#ccc" fill="none" strokeWidth={this.state.magnetDiameter/10} />
+            </svg>
+          </div>;
+      }
+    });
+
+    ReactDOM.render(
+      <RadialMagnetLines />,
+      document.getElementById('canvas')
+    );
+    </script>
+  </body>
+</html>
